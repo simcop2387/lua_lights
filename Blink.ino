@@ -21,6 +21,16 @@ ssize_t _write(int fd, const void *buf, size_t count) {return -1;}
 // I want to replace this with an arena allocator so that i can get better memory performance in the future
      static void *l_alloc (void *ud, void *ptr, size_t osize,
                                                 size_t nsize) {
+       
+       Serial.print("\t->alloc called: ");
+       Serial.print((size_t) ud, HEX);
+       Serial.print(" ");
+       Serial.print((size_t) ptr, HEX);
+       Serial.print(" ");
+       Serial.print(osize, DEC);
+       Serial.print(",");
+       Serial.println(nsize, DEC);
+       
        (void)ud;  (void)osize;  /* not used */
        if (nsize == 0) {
          free(ptr);
@@ -37,26 +47,28 @@ void setup() {
   // Pin 13 has an LED connected on most Arduino boards:
   pinMode(13, OUTPUT);
   Serial.begin(9600);
+  delay(10000);
   L = lua_newstate(l_alloc, 0);
 
-/*  luaopen_table(L);
+  Serial.println("Importing libraries");
+  luaopen_table(L);
   luaopen_string(L);
   luaopen_math(L);
   luaopen_bit32(L);
-  luaopen_coroutine(L); // should this be optional?*/
+  luaopen_coroutine(L); // should this be optional?
+  Serial.println("Libraries imported\nLoading hello world");
   //luaopen_debug(L);
 //  luaL_openlibs(L);  // Can't init this way, need to use something else.
-
-/*  luaL_dostring(L, "function hello()\n" \
-                   "    return 4200\n" \
-                   "end"); */
   
-  lua_close(L);
+  luaL_dostring(L, "function hello()\n" \
+                   "    return 2\n" \
+                   "end");
 }
 
 void loop() {
   lua_Integer d;
-  
+  Serial.print("Executing hello world: ");
+  Serial.println(millis(), DEC);
   lua_getglobal(L, "hello");
   
   if (lua_pcall(L, 0, 1, 0) != 0) {
@@ -72,7 +84,7 @@ void loop() {
   lua_pop(L, 1);
   
   digitalWrite(13, HIGH);   // set the LED on
-  delay(1000);              // wait for a second
+  delay(d);              // wait for a second
   digitalWrite(13, LOW);    // set the LED off
-  delay(1000);              // wait for a second
+  delay(d);              // wait for a second
 }
