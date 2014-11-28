@@ -38,9 +38,9 @@ void read_method(Adafruit_CC3000_ClientRef &client) {
 }
 
 void listen_http() {
-  LogOut.println("Checking HTTP...");
+  // LogOut.println("Checking HTTP...");
   Adafruit_CC3000_ClientRef client = httpServer.available();
-  LogOut.println("Got Accept");
+  // LogOut.println("Got Accept");
   
   if (client) {
     LogOut.println("GOT REQUEST, READING METHOD");
@@ -49,5 +49,5 @@ void listen_http() {
   }
 
   client.close();
-  LogOut.println("Done HTTP");
+  // LogOut.println("Done HTTP");
 }
