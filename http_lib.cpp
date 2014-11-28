@@ -1,5 +1,7 @@
+#include "log.h"
 #include "http_lib.h"
-#include "handler.h"
+#include "handlers.h"
+#include "dispatch.h"
 #include <Adafruit_CC3000.h>
 
 Adafruit_CC3000_Server httpServer(80);  

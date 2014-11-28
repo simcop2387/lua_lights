@@ -54,8 +54,8 @@ void l_init() {
 
 void l_frame() {
     lua_Integer d;
-  LogOut.print("Executing hello world: ");
-  LogOut.println(millis(), DEC);
+//  LogOut.print("Executing hello world: ");
+//  LogOut.println(millis(), DEC);
   lua_getglobal(L, "hello");
   
   if (lua_pcall(L, 0, 1, 0) != 0) {

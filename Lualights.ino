@@ -19,10 +19,12 @@ void setup() {
   
   l_init();
   setup_cc3000();
+  start_http();
 }
 
 void loop() {
   l_frame();
+  listen_http();
   
   //digitalWrite(13, HIGH);   // set the LED on
   //delay(100);              // wait for a second
