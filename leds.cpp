@@ -14,8 +14,8 @@ void setup_leds() {
 };
 
 void loop_leds() {
-  for(int i = 0; i < 10; i++)
-    led_data[i] = CRGB::White;
+//  for(int i = 0; i < 10; i++)
+//    led_data[i] = CRGB::White;
   
   FastLED.show();
 };

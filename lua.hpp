@@ -91,43 +91,82 @@ int luaopen_array (lua_State* L) {
    return 0;
 }
 
+static const luaL_Reg loadedlibs[] = {
+  {"_G", luaopen_base},
+//  {LUA_LOADLIBNAME, luaopen_package},
+  {LUA_COLIBNAME, luaopen_coroutine},
+  {LUA_TABLIBNAME, luaopen_table},
+  {LUA_STRLIBNAME, luaopen_string},
+  {LUA_BITLIBNAME, luaopen_bit32},
+  {LUA_MATHLIBNAME, luaopen_math},
+  {LUA_DBLIBNAME, luaopen_debug},
+  {NULL, NULL}
+};
+
+void l_openlibs(lua_State *L) {
+  const luaL_Reg *lib;
+  /* call open functions from 'loadedlibs' and set results to global table */
+  for (lib = loadedlibs; lib->func; lib++) {
+    luaL_requiref(L, lib->name, lib->func, 1);
+    lua_pop(L, 1);  /* remove lib */
+  }
+}
+
 // INIT AND FRAME CODE.
 void l_init() {
   L = lua_newstate(l_alloc, 0);
 
   LogOut.println("Importing libraries");
-  luaopen_table(L);
+  
+  l_openlibs(L);
+/*  luaopen_table(L);
   luaopen_string(L);
   luaopen_math(L);
   luaopen_bit32(L);
-  luaopen_coroutine(L); // should this be optional?
+  luaopen_coroutine(L); // should this be optional? */
   luaopen_array(L);
   LogOut.println("Libraries imported\nLoading hello world");
   //luaopen_debug(L);
   //getarray(L);
   
-  luaL_dostring(L, "function hello()\n"
+  int e = luaL_dostring(L, 
+                   //"coroutine = require(\"coroutine\")\n"
+                   "function run_frame()\n"
+                   "    coroutine.resume(corun)\n"
+                   "end\n"
+                   "function setup_frame()\n"
+                   "    corun = coroutine.create(user_func)\n"
+                   "    debug.sethook(corun, coroutine.yield, \"\", 50)\n"
+                   "    \n"
+                   "end\n"
+                   "function user_func()\n"
                    "    leds = led_data()\n"
-                   "    leds[11] = 255\n"
-                   "    return 2\n"
-                   "end");
+                   "    for i = 0, 10 do\n"
+                   "        leds[i] = i * 10\n"
+                   "    end\n"
+                   "end\n"
+                   "setup_frame()");
+  
+  if (e) {
+    LogOut.print("error evaling default sub: ");
+    LogOut.println(lua_tostring(L, -1));
+  }
+}
+
+void l_reinit() {
+  lua_close(L);
+  // clear memory when I have allocator writte
+  l_init(); // reload system
 }
 
 void l_frame() {
   lua_Integer d;
   LogOut.println("Executing hello world:");
 //  LogOut.println(millis(), DEC);
-  lua_getglobal(L, "hello");
+  lua_getglobal(L, "run_frame");
   
   if (lua_pcall(L, 0, 1, 0) != 0) {
     LogOut.print("error calling hello: ");
     LogOut.println(lua_tostring(L, -1));
   }
-  
-  if (!lua_isnumber(L, -1)) {
-    LogOut.println("Return value must be number");
-  }
-  
-  d = lua_tointeger(L, -1);
-  lua_pop(L, 1);
 }
