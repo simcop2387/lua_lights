@@ -1,4 +1,5 @@
 #include "log.h"
+#include "leds.h"
 
 extern "C" {
 #include "lua.h"
@@ -35,6 +36,61 @@ lua_State *L;
     return realloc(ptr, nsize);
 }
 
+// CREATE ARRAY TYPE AND EXPOSE led_data TO LUA.
+// metatable method for handling "array[index]"
+static int array_index (lua_State* L) { 
+   int** parray = (int **) luaL_checkudata(L, 1, "array");
+   int index = luaL_checkint(L, 2);
+   lua_pushnumber(L, (*parray)[index-1]);
+   return 1; 
+}
+
+// metatable method for handle "array[index] = value"
+static int array_newindex (lua_State* L) { 
+   CRGB** parray = (CRGB **) luaL_checkudata(L, 1, "array");
+   int index = luaL_checkint(L, 2);
+   int value = luaL_checkint(L, 3);
+   (*parray)[index-1] = value;
+   return 0; 
+}
+
+// create a metatable for our array type
+static void create_array_type(lua_State* L) {
+  static const struct luaL_Reg array[] = {
+    { "__index",  array_index  },
+    { "__newindex",  array_newindex  },
+    {NULL, NULL}
+  };
+  luaL_newmetatable(L, "array");
+  lua_newtable(L);
+  luaL_setfuncs(L, array, 0);
+  lua_setglobal(L, "array");
+}
+
+
+// expose an array to lua, by storing it in a userdata with the array metatable
+static int expose_array(lua_State* L, CRGB array[]) {
+   CRGB** parray = (CRGB **) lua_newuserdata(L, sizeof(CRGB**));
+   *parray = array;
+   luaL_getmetatable(L, "array");
+   lua_setmetatable(L, -2);
+   return 1;
+}
+
+// test routine which exposes our test array to Lua 
+static int getarray (lua_State* L) { 
+   return expose_array( L, led_data );
+}
+
+int luaopen_array (lua_State* L) {
+   create_array_type(L);
+
+   // make our test routine available to Lua
+   lua_register(L, "array", getarray);
+   return 0;
+}
+
+// INIT AND FRAME CODE.
 void l_init() {
   L = lua_newstate(l_alloc, 0);
 
@@ -46,7 +102,7 @@ void l_init() {
   luaopen_coroutine(L); // should this be optional?
   LogOut.println("Libraries imported\nLoading hello world");
   //luaopen_debug(L);
-
+    
   luaL_dostring(L, "function hello()\n" \
                    "    return 2\n" \
                    "end");
