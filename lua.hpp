@@ -38,33 +38,34 @@ lua_State *L;
 
 // CREATE ARRAY TYPE AND EXPOSE led_data TO LUA.
 // metatable method for handling "array[index]"
-static int array_index (lua_State* L) { 
-   int** parray = (int **) luaL_checkudata(L, 1, "array");
+static int led_data_index (lua_State* L) { 
+   CRGB** parray = (CRGB **) luaL_checkudata(L, 1, "led_data");
    int index = luaL_checkint(L, 2);
    lua_pushnumber(L, (*parray)[index-1]);
    return 1; 
 }
 
 // metatable method for handle "array[index] = value"
-static int array_newindex (lua_State* L) { 
-   CRGB** parray = (CRGB **) luaL_checkudata(L, 1, "array");
+static int led_data_newindex (lua_State* L) { 
+   CRGB** parray = (CRGB **) luaL_checkudata(L, 1, "led_data");
    int index = luaL_checkint(L, 2);
    int value = luaL_checkint(L, 3);
    (*parray)[index-1] = value;
    return 0; 
 }
 
+static const struct luaL_Reg led_data_metamethods[] = {
+    { "__index",  led_data_index  },
+    { "__newindex",  led_data_newindex  },
+    {NULL, NULL}
+};
+
+
 // create a metatable for our array type
 static void create_array_type(lua_State* L) {
-  static const struct luaL_Reg array[] = {
-    { "__index",  array_index  },
-    { "__newindex",  array_newindex  },
-    {NULL, NULL}
-  };
-  luaL_newmetatable(L, "array");
-  lua_newtable(L);
-  luaL_setfuncs(L, array, 0);
-  lua_setglobal(L, "array");
+  luaL_newmetatable(L, "led_data");
+  luaL_setfuncs(L, led_data_metamethods, 0);
+  //lua_setglobal(L, "led_data");
 }
 
 
@@ -72,7 +73,7 @@ static void create_array_type(lua_State* L) {
 static int expose_array(lua_State* L, CRGB array[]) {
    CRGB** parray = (CRGB **) lua_newuserdata(L, sizeof(CRGB**));
    *parray = array;
-   luaL_getmetatable(L, "array");
+   luaL_getmetatable(L, "led_data");
    lua_setmetatable(L, -2);
    return 1;
 }
@@ -86,7 +87,7 @@ int luaopen_array (lua_State* L) {
    create_array_type(L);
 
    // make our test routine available to Lua
-   lua_register(L, "array", getarray);
+   lua_register(L, "led_data", getarray);
    return 0;
 }
 
@@ -103,16 +104,18 @@ void l_init() {
   luaopen_array(L);
   LogOut.println("Libraries imported\nLoading hello world");
   //luaopen_debug(L);
-  getarray(L);
+  //getarray(L);
   
-  luaL_dostring(L, "function hello()\n" \
-                   "    return 2\n" \
+  luaL_dostring(L, "function hello()\n"
+                   "    leds = led_data()\n"
+                   "    leds[11] = 255\n"
+                   "    return 2\n"
                    "end");
 }
 
 void l_frame() {
-    lua_Integer d;
-//  LogOut.print("Executing hello world: ");
+  lua_Integer d;
+  LogOut.println("Executing hello world:");
 //  LogOut.println(millis(), DEC);
   lua_getglobal(L, "hello");
   
