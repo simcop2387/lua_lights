@@ -7,15 +7,18 @@
 
 #include "lua.hpp"
 #include "wifi.h"
-     
+#include "http_lib.h"
+#include "log.h"
+
 void setup() {
   // initialize the digital pin as an output.
   // Pin 13 has an LED connected on most Arduino boards:
   //pinMode(13, OUTPUT);
-  Serial.begin(9600);
+  LogOut.begin(9600);
   delay(10000);
   
   l_init();
+  setup_cc3000();
 }
 
 void loop() {
