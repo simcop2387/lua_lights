@@ -119,11 +119,6 @@ void l_init() {
   LogOut.println("Importing libraries");
   
   l_openlibs(L);
-/*  luaopen_table(L);
-  luaopen_string(L);
-  luaopen_math(L);
-  luaopen_bit32(L);
-  luaopen_coroutine(L); // should this be optional? */
   luaopen_array(L);
   LogOut.println("Libraries imported\nLoading hello world");
   //luaopen_debug(L);
@@ -133,20 +128,29 @@ void l_init() {
                    //"coroutine = require(\"coroutine\")\n"
                    "function run_frame()\n"
                    "    coroutine.resume(corun)\n"
+                   "    collectgarbage()\n"
+                   "end\n"
+                   "function coro_loop()\n"
+                   "    while true do\n"
+                   "        user_func()\n"
+                   "    end\n"
                    "end\n"
                    "function setup_frame()\n"
-                   "    corun = coroutine.create(user_func)\n"
+                   "    corun = coroutine.create(coro_loop)\n"
                    "    debug.sethook(corun, coroutine.yield, \"\", 50)\n"
                    "    \n"
                    "end\n"
+                   "offset = 0\n"
                    "function user_func()\n"
-                   "    leds = led_data()\n"
+                   "    local leds = led_data()\n"
+                   "    local i = 0\n"
                    "    for i = 0, 10 do\n"
-                   "        leds[i] = i * 10\n"
+                   "        leds[i] = offset\n"
                    "    end\n"
+                   "    offset = offset + 10\n"
                    "end\n"
                    "setup_frame()");
-  
+
   if (e) {
     LogOut.print("error evaling default sub: ");
     LogOut.println(lua_tostring(L, -1));
@@ -169,4 +173,8 @@ void l_frame() {
     LogOut.print("error calling hello: ");
     LogOut.println(lua_tostring(L, -1));
   }
+  
+  // NTS: DO NOT REMOVE THIS.
+  // If it's removed you end up with gigantic memory leaks and an exponentially growing stack
+  lua_pop(L, 1); // remove return from function, just ignore it
 }
