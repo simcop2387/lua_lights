@@ -100,9 +100,11 @@ void l_init() {
   luaopen_math(L);
   luaopen_bit32(L);
   luaopen_coroutine(L); // should this be optional?
+  luaopen_array(L);
   LogOut.println("Libraries imported\nLoading hello world");
   //luaopen_debug(L);
-    
+  getarray(L);
+  
   luaL_dostring(L, "function hello()\n" \
                    "    return 2\n" \
                    "end");
