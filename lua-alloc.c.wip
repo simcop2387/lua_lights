@@ -46,37 +46,6 @@
 #define MAX(a,b) ((a) >= (b) ? (a) : (b))
 #endif
 
-#ifdef INTERNAL_NEWLIB
-
-#include <sys/config.h>
-#include <reent.h>
-
-#define RARG struct _reent *reent_ptr,
-#define RONEARG struct _reent *reent_ptr
-#define RCALL reent_ptr,
-#define RONECALL reent_ptr
-
-/* Disable MALLOC_LOCK so far. So it won't be thread safe */
-#define MALLOC_LOCK /*__malloc_lock(reent_ptr) */
-#define MALLOC_UNLOCK /*__malloc_unlock(reent_ptr) */
-
-#define RERRNO reent_ptr->_errno
-
-#define nano_malloc		_malloc_r
-#define nano_free		_free_r
-#define nano_realloc		_realloc_r
-#define nano_memalign		_memalign_r
-#define nano_valloc		_valloc_r
-#define nano_pvalloc		_pvalloc_r
-#define nano_calloc		_calloc_r
-#define nano_cfree		_cfree_r
-#define nano_malloc_usable_size _malloc_usable_size_r
-#define nano_malloc_stats	_malloc_stats_r
-#define nano_mallinfo		_mallinfo_r
-#define nano_mallopt		_mallopt_r
-
-#else /* ! INTERNAL_NEWLIB */
-
 #define RARG
 #define RONEARG
 #define RCALL
@@ -85,38 +54,37 @@
 #define MALLOC_UNLOCK
 #define RERRNO errno
 
-#define nano_malloc		malloc
-#define nano_free		free
-#define nano_realloc		realloc
-#define nano_memalign		memalign
-#define nano_valloc		valloc
-#define nano_pvalloc		pvalloc
-#define nano_calloc		calloc
-#define nano_cfree		cfree
-#define nano_malloc_usable_size malloc_usable_size
-#define nano_malloc_stats	malloc_stats
-#define nano_mallinfo		mallinfo
-#define nano_mallopt		mallopt
-#endif /* ! INTERNAL_NEWLIB */
+#define nano_malloc		l_malloc
+#define nano_free		l_free
+#define nano_realloc		l_realloc
+#define nano_memalign		l_memalign
+#define nano_valloc		l_valloc
+#define nano_pvalloc		l_pvalloc
+#define nano_calloc		l_calloc
+#define nano_cfree		l_cfree
+#define nano_malloc_usable_size l_malloc_usable_size
+#define nano_malloc_stats	l_malloc_stats
+#define nano_mallinfo		l_mallinfo
+#define nano_mallopt		l_mallopt
 
 /* Redefine names to avoid conflict with user names */
-#define free_list __malloc_free_list
-#define sbrk_start __malloc_sbrk_start
-#define current_mallinfo __malloc_current_mallinfo
+#define free_list __lalloc_free_list
+#define sbrk_start __lalloc_sbrk_start
+#define current_mallinfo __lalloc_current_mallinfo
 
 #define ALIGN_TO(size, align) \
     (((size) + (align) -1) & ~((align) -1))
 
 /* Alignment of allocated block */
-#define MALLOC_ALIGN (8U)
+#define MALLOC_ALIGN (4U)
 #define CHUNK_ALIGN (sizeof(void*))
 #define MALLOC_PADDING ((MAX(MALLOC_ALIGN, CHUNK_ALIGN)) - CHUNK_ALIGN)
 
 /* as well as the minimal allocation size
  * to hold a free pointer */
 #define MALLOC_MINSIZE (sizeof(void *))
-#define MALLOC_PAGE_ALIGN (0x1000)
-#define MAX_ALLOC_SIZE (0x80000000U)
+#define MALLOC_PAGE_ALIGN (sizeof(void *))
+#define MAX_ALLOC_SIZE (0x4000U)
 
 typedef size_t malloc_size_t;
 

@@ -1,0 +1,23 @@
+All paths take POST as form encoding and return as JSON
+
+Available Paths:
+/ - This Document (GET)
+/settings/current/color - Current color (GET, POST) [r, g, b]
+/settings/current/dark - Light threshold 0-1024 (GET, POST) [dark]
+/settings/current/time - Seconds to stay on 0-65535 (GET, POST) [time]
+/status/dark - Current light reading (GET) [dark]
+/status/time - Current time (GET) [time]
+/status/state - Current state [state]
+
+States:
+enum e_state {WAITING, LIGHT_CHECK, LIGHT_ON, LIGHT_TIME, FORCE_OFF, FORCE_ON} state;
+
+            no dark                                          motion
+  +----------------------+                        +-------------------------+
+  v                      |                        v                         |
++---------+  motion    +--------------+  dark   +----------+  no motion   +------------+
+| waiting | ---------> | light_check1 | ------> | light_on | -----------> | light_time |
++---------+            +--------------+         +----------+              +------------+
+  ^         timeout                                                         |
+  +-------------------------------------------------------------------------+
+
