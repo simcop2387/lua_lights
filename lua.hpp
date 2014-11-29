@@ -14,7 +14,7 @@ int _open(const char *pathname, int flags) {return -1;}
 ssize_t _write(int fd, const void *buf, size_t count) {return -1;}
 }
 
-lua_State *L;
+lua_State *L, *t1;
 
 // I want to replace this with an arena allocator so that i can get better memory performance in the future
  static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
@@ -52,6 +52,35 @@ static int led_data_newindex (lua_State* L) {
    int value = luaL_checkint(L, 3);
    (*parray)[index-1] = value;
    return 0; 
+}
+
+void l_yield(lua_State *L, lua_Debug *ar) {
+  lua_yield(L, 0);
+}
+
+static int l_sethook(lua_State *L) {
+  lua_sethook(L, &l_yield, LUA_MASKCOUNT, 2);
+  return 0;
+}
+
+int full_run(lua_State *L, lua_State *t) {
+  int rc = lua_resume(t, L, 0);
+
+  // TODO this is the all important part where i handle errors, the main function exiting, and make sure yielding went properly
+  LogOut.print("rc = ");
+  LogOut.println(rc, DEC);
+  if (rc == 0) {
+    LogOut.println("Finished?");
+  } else if (rc == LUA_ERRRUN) {
+    LogOut.print("Errored!");
+    LogOut.println(lua_tostring(t1, -1));
+  } else if (rc != LUA_YIELD) {
+    LogOut.println("Errored!");
+  } else {
+    LogOut.println("Yielded!");
+  }
+
+  return rc;
 }
 
 static const struct luaL_Reg led_data_metamethods[] = {
@@ -126,40 +155,33 @@ void l_init() {
   
   int e = luaL_dostring(L, 
                    //"coroutine = require(\"coroutine\")\n"
-                   "function run_frame()\n"
-                   "    coroutine.resume(corun)\n"
-                   "    collectgarbage()\n"
-                   "end\n"
-                   "function coro_loop()\n"
+                   "function main()\n"
                    "    while true do\n"
-                   "        user_func()\n"
+                   "        local leds = led_data()\n"
+                   "        for r = 0, 255, 5 do\n"
+                   "            for g = 0, 255, 5 do\n"
+                   "                for b = 0, 255, 5 do\n"
+                   "                  leds[1] = r * 65536 + g * 256 + b\n"
+                   "                end\n"
+                   "            end\n"
+                   "        end\n"
                    "    end\n"
-                   "end\n"
-                   "function setup_frame()\n"
-                   "    corun = coroutine.create(coro_loop)\n"
-                   "    debug.sethook(corun, coroutine.yield, \"\", 50)\n"
-                   "    \n"
-                   "end\n"
-                   "offset = 0\n"
-                   "function user_func()\n"
-                   "    local leds = led_data()\n"
-                   "    local i = 0\n"
-                   "    for i = 0, 10 do\n"
-                   "        leds[i] = offset\n"
-                   "    end\n"
-                   "    offset = offset + 10\n"
-                   "end\n"
-                   "setup_frame()");
+                   "end\n");
 
   if (e) {
     LogOut.print("error evaling default sub: ");
     LogOut.println(lua_tostring(L, -1));
   }
+  
+  // Create the coroutine
+  t1 = lua_newthread(L);
+  l_sethook(t1);
+  lua_getglobal(t1, "main");
 }
 
 void l_reinit() {
   lua_close(L);
-  // clear memory when I have allocator writte
+  // clear memory when I have allocator write
   l_init(); // reload system
 }
 
@@ -167,14 +189,7 @@ void l_frame() {
   lua_Integer d;
   LogOut.println("Executing hello world:");
 //  LogOut.println(millis(), DEC);
-  lua_getglobal(L, "run_frame");
+
   
-  if (lua_pcall(L, 0, 1, 0) != 0) {
-    LogOut.print("error calling hello: ");
-    LogOut.println(lua_tostring(L, -1));
-  }
-  
-  // NTS: DO NOT REMOVE THIS.
-  // If it's removed you end up with gigantic memory leaks and an exponentially growing stack
-  lua_pop(L, 1); // remove return from function, just ignore it
+  full_run(L, t1);
 }
