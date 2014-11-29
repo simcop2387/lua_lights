@@ -54,23 +54,10 @@
 #define MALLOC_UNLOCK
 #define RERRNO errno
 
-#define nano_malloc		l_malloc
-#define nano_free		l_free
-#define nano_realloc		l_realloc
-#define nano_memalign		l_memalign
-#define nano_valloc		l_valloc
-#define nano_pvalloc		l_pvalloc
-#define nano_calloc		l_calloc
-#define nano_cfree		l_cfree
-#define nano_malloc_usable_size l_malloc_usable_size
-#define nano_malloc_stats	l_malloc_stats
-#define nano_mallinfo		l_mallinfo
-#define nano_mallopt		l_mallopt
-
 /* Redefine names to avoid conflict with user names */
-#define free_list __lalloc_free_list
-#define sbrk_start __lalloc_sbrk_start
-#define current_mallinfo __lalloc_current_mallinfo
+#define free_list __llalloc_free_list
+#define sbrk_start __llalloc_sbrk_start
+#define current_mallinfo __llalloc_current_mallinfo
 
 #define ALIGN_TO(size, align) \
     (((size) + (align) -1) & ~((align) -1))
@@ -139,18 +126,12 @@ extern char * sbrk_start;
 extern struct mallinfo current_mallinfo;
 
 /* Forward function declarations */
-extern void * nano_malloc(RARG malloc_size_t);
-extern void nano_free (RARG void * free_p);
-extern void nano_cfree(RARG void * ptr);
-extern void * nano_calloc(RARG malloc_size_t n, malloc_size_t elem);
-extern struct mallinfo nano_mallinfo(RONEARG);
-extern void nano_malloc_stats(RONEARG);
-extern malloc_size_t nano_malloc_usable_size(RARG void * ptr);
-extern void * nano_realloc(RARG void * ptr, malloc_size_t size);
-extern void * nano_memalign(RARG size_t align, size_t s);
-extern int nano_mallopt(RARG int parameter_number, int parameter_value);
-extern void * nano_valloc(RARG size_t s);
-extern void * nano_pvalloc(RARG size_t s);
+extern void * ll_malloc(RARG malloc_size_t);
+extern void ll_free (RARG void * free_p);
+extern void * ll_calloc(RARG malloc_size_t n, malloc_size_t elem);
+extern struct mallinfo ll_mallinfo(RONEARG);
+extern malloc_size_t ll_malloc_usable_size(RARG void * ptr);
+extern void * ll_realloc(RARG void * ptr, malloc_size_t size);
 
 static inline chunk * get_chunk_from_ptr(void * ptr)
 {
@@ -160,49 +141,29 @@ static inline chunk * get_chunk_from_ptr(void * ptr)
     return c;
 }
 
-#ifdef DEFINE_MALLOC
-/* List list header of free blocks */
-chunk * free_list = NULL;
-
 /* Starting point of memory allocated from system */
-char * sbrk_start = NULL;
+char sbrk_start[LL_ARENA_SIZE];
 
-/** Function sbrk_aligned
-  * Algorithm:
-  *   Use sbrk() to obtain more memory and ensure it is CHUNK_ALIGN aligned
-  *   Optimise for the case that it is already aligned - only ask for extra
-  *   padding after we know we need it
-  */
-static void* sbrk_aligned(RARG malloc_size_t s)
-{
-    char *p, *align_p;
+/* List list header of free blocks */
+chunk free_list_default = {LL_ARENA_SIZE, NULL}; // keep a statically allocated starter freelist
+chunk * free_list = &free_list_default;
 
-    if (sbrk_start == NULL) sbrk_start = _sbrk_r(RCALL 0);
-
-    p = _sbrk_r(RCALL s);
-
-    /* sbrk returns -1 if fail to allocate */
-    if (p == (void *)-1)
-        return p;
-
-    align_p = (char*)ALIGN_TO((unsigned long)p, CHUNK_ALIGN);
-    if (align_p != p)
-    {
-        /* p is not aligned, ask for a few more bytes so that we have s
-         * bytes reserved from align_p. */
-        p = _sbrk_r(RCALL align_p - p);
-        if (p == (void *)-1)
-            return p;
-    }
-    return align_p;
+void ll_clean_arena() {
+  // Make sure the default hasn't been overridden
+  free_list_default.size = LL_ARENA_SIZE;
+  free_list_default.next = NULL;
+  free_list = &free_list_default;
+  
+  // Reset all ram inside the arena
+  memset(sbrk_start, 0, LL_ARENA_SIZE);
 }
 
-/** Function nano_malloc
+/** Function ll_malloc
   * Algorithm:
   *   Walk through the free list to find the first match. If fails to find
   *   one, call sbrk to allocate a new chunk.
   */
-void * nano_malloc(RARG malloc_size_t s)
+void * ll_malloc(RARG malloc_size_t s)
 {
     chunk *p, *r;
     char * ptr, * align_ptr;
@@ -261,16 +222,9 @@ void * nano_malloc(RARG malloc_size_t s)
     /* Failed to find a appropriate chunk. Ask for more memory */
     if (r == NULL)
     {
-        r = sbrk_aligned(RCALL alloc_size);
-
-        /* sbrk returns -1 if fail to allocate */
-        if (r == (void *)-1)
-        {
-            RERRNO = ENOMEM;
-            MALLOC_UNLOCK;
-            return NULL;
-        }
-        r->size = alloc_size;
+        RERRNO = ENOMEM;
+        MALLOC_UNLOCK;
+        return NULL;
     }
     MALLOC_UNLOCK;
 
@@ -287,12 +241,8 @@ void * nano_malloc(RARG malloc_size_t s)
     assert(align_ptr + size <= (char *)r + alloc_size);
     return align_ptr;
 }
-#endif /* DEFINE_MALLOC */
 
-#ifdef DEFINE_FREE
-#define MALLOC_CHECK_DOUBLE_FREE
-
-/** Function nano_free
+/** Function ll_free
   * Implementation of libc free.
   * Algorithm:
   *  Maintain a global free chunk single link list, headed by global
@@ -301,7 +251,7 @@ void * nano_malloc(RARG malloc_size_t s)
   *  insert should make sure all chunks are sorted by address from low to
   *  high.  Then merge with neighbor chunks if adjacent.
   */
-void nano_free (RARG void * free_p)
+void ll_free (RARG void * free_p)
 {
     chunk * p_to_free;
     chunk * p, * q;
@@ -363,7 +313,6 @@ void nano_free (RARG void * free_p)
             p->next = q->next;
         }
     }
-#ifdef MALLOC_CHECK_DOUBLE_FREE
     else if ((char *)p + p->size > (char *)p_to_free)
     {
         /* Report double free fault */
@@ -371,7 +320,6 @@ void nano_free (RARG void * free_p)
         MALLOC_UNLOCK;
         return;
     }
-#endif
     else if ((char *)p_to_free + p_to_free->size == (char *) q)
     {
         /* Chunk to be freed is adjacent
@@ -389,78 +337,55 @@ void nano_free (RARG void * free_p)
     }
     MALLOC_UNLOCK;
 }
-#endif /* DEFINE_FREE */
 
-#ifdef DEFINE_CFREE
-void nano_cfree(RARG void * ptr)
-{
-    nano_free(RCALL ptr);
-}
-#endif /* DEFINE_CFREE */
-
-#ifdef DEFINE_CALLOC
-/* Function nano_calloc
+/* Function ll_calloc
  * Implement calloc simply by calling malloc and set zero */
-void * nano_calloc(RARG malloc_size_t n, malloc_size_t elem)
+void * ll_calloc(RARG malloc_size_t n, malloc_size_t elem)
 {
-    void * mem = nano_malloc(RCALL n * elem);
+    void * mem = ll_malloc(RCALL n * elem);
     if (mem != NULL) memset(mem, 0, n * elem);
     return mem;
 }
-#endif /* DEFINE_CALLOC */
 
-#ifdef DEFINE_REALLOC
-/* Function nano_realloc
+/* Function ll_realloc
  * Implement realloc by malloc + memcpy */
-void * nano_realloc(RARG void * ptr, malloc_size_t size)
+void * ll_realloc(RARG void * ptr, malloc_size_t size)
 {
     void * mem;
     chunk * p_to_realloc;
 
-    if (ptr == NULL) return nano_malloc(RCALL size);
+    if (ptr == NULL) return ll_malloc(RCALL size);
 
     if (size == 0)
     {
-        nano_free(RCALL ptr);
+        ll_free(RCALL ptr);
         return NULL;
     }
 
     /* TODO: There is chance to shrink the chunk if newly requested
      * size is much small */
-    if (nano_malloc_usable_size(RCALL ptr) >= size)
+    if (ll_malloc_usable_size(RCALL ptr) >= size)
       return ptr;
 
-    mem = nano_malloc(RCALL size);
+    mem = ll_malloc(RCALL size);
     if (mem != NULL)
     {
         memcpy(mem, ptr, size);
-        nano_free(RCALL ptr);
+        ll_free(RCALL ptr);
     }
     return mem;
 }
-#endif /* DEFINE_REALLOC */
 
-#ifdef DEFINE_MALLINFO
 struct mallinfo current_mallinfo={0,0,0,0,0,0,0,0,0,0};
 
-struct mallinfo nano_mallinfo(RONEARG)
+struct mallinfo ll_mallinfo(RONEARG)
 {
     char * sbrk_now;
     chunk * pf;
     size_t free_size = 0;
-    size_t total_size;
+    size_t total_size = LL_ARENA_SIZE;
 
     MALLOC_LOCK;
-
-    if (sbrk_start == NULL) total_size = 0;
-    else {
-        sbrk_now = _sbrk_r(RCALL 0);
-
-        if (sbrk_now == (void *)-1)
-            total_size = (size_t)-1;
-        else
-            total_size = (size_t) (sbrk_now - sbrk_start);
-    }
 
     for (pf = free_list; pf; pf = pf->next)
         free_size += pf->size;
@@ -472,23 +397,8 @@ struct mallinfo nano_mallinfo(RONEARG)
     MALLOC_UNLOCK;
     return current_mallinfo;
 }
-#endif /* DEFINE_MALLINFO */
 
-#ifdef DEFINE_MALLOC_STATS
-void nano_malloc_stats(RONEARG)
-{
-    nano_mallinfo(RONECALL);
-    fiprintf(stderr, "max system bytes = %10u\n",
-             current_mallinfo.arena);
-    fiprintf(stderr, "system bytes     = %10u\n",
-             current_mallinfo.arena);
-    fiprintf(stderr, "in use bytes     = %10u\n",
-             current_mallinfo.uordblks);
-}
-#endif /* DEFINE_MALLOC_STATS */
-
-#ifdef DEFINE_MALLOC_USABLE_SIZE
-malloc_size_t nano_malloc_usable_size(RARG void * ptr)
+malloc_size_t ll_malloc_usable_size(RARG void * ptr)
 {
     chunk * c = (chunk *)((char *)ptr - CHUNK_OFFSET);
     int size_or_offset = c->size;
@@ -501,95 +411,3 @@ malloc_size_t nano_malloc_usable_size(RARG void * ptr)
     }
     return c->size - CHUNK_OFFSET;
 }
-#endif /* DEFINE_MALLOC_USABLE_SIZE */
-
-#ifdef DEFINE_MEMALIGN
-/* Function nano_memalign
- * Allocate memory block aligned at specific boundary.
- *   align: required alignment. Must be power of 2. Return NULL
- *          if not power of 2. Undefined behavior is bigger than
- *          pointer value range.
- *   s: required size.
- * Return: allocated memory pointer aligned to align
- * Algorithm: Malloc a big enough block, padding pointer to aligned
- *            address, then truncate and free the tail if too big.
- *            Record the offset of align pointer and original pointer
- *            in the padding area.
- */
-void * nano_memalign(RARG size_t align, size_t s)
-{
-    chunk * chunk_p;
-    malloc_size_t size_allocated, offset, ma_size, size_with_padding;
-    char * allocated, * aligned_p;
-
-    /* Return NULL if align isn't power of 2 */
-    if ((align & (align-1)) != 0) return NULL;
-
-    align = MAX(align, MALLOC_ALIGN);
-    ma_size = ALIGN_TO(MAX(s, MALLOC_MINSIZE), CHUNK_ALIGN);
-    size_with_padding = ma_size + align - MALLOC_ALIGN;
-
-    allocated = nano_malloc(RCALL size_with_padding);
-    if (allocated == NULL) return NULL;
-
-    chunk_p = get_chunk_from_ptr(allocated);
-    aligned_p = (char *)ALIGN_TO(
-                  (unsigned long)((char *)chunk_p + CHUNK_OFFSET),
-                  (unsigned long)align);
-    offset = aligned_p - ((char *)chunk_p + CHUNK_OFFSET);
-
-    if (offset)
-    {
-        if (offset >= MALLOC_MINCHUNK)
-        {
-            /* Padding is too large, free it */
-            chunk * front_chunk = chunk_p;
-            chunk_p = (chunk *)((char *)chunk_p + offset);
-            chunk_p->size = front_chunk->size - offset;
-            front_chunk->size = offset;
-            nano_free(RCALL (char *)front_chunk + CHUNK_OFFSET);
-        }
-        else
-        {
-            /* Padding is used. Need to set a jump offset for aligned pointer
-            * to get back to chunk head */
-            assert(offset >= sizeof(int));
-            *(int *)((char *)chunk_p + offset) = -offset;
-        }
-    }
-
-    size_allocated = chunk_p->size;
-    if ((char *)chunk_p + size_allocated >
-         (aligned_p + ma_size + MALLOC_MINCHUNK))
-    {
-        /* allocated much more than what's required for padding, free
-         * tail part */
-        chunk * tail_chunk = (chunk *)(aligned_p + ma_size);
-        chunk_p->size = aligned_p + ma_size - (char *)chunk_p;
-        tail_chunk->size = size_allocated - chunk_p->size;
-        nano_free(RCALL (char *)tail_chunk + CHUNK_OFFSET);
-    }
-    return aligned_p;
-}
-#endif /* DEFINE_MEMALIGN */
-
-#ifdef DEFINE_MALLOPT
-int nano_mallopt(RARG int parameter_number, int parameter_value)
-{
-    return 0;
-}
-#endif /* DEFINE_MALLOPT */
-
-#ifdef DEFINE_VALLOC
-void * nano_valloc(RARG size_t s)
-{
-    return nano_memalign(RCALL MALLOC_PAGE_ALIGN, s);
-}
-#endif /* DEFINE_VALLOC */
-
-#ifdef DEFINE_PVALLOC
-void * nano_pvalloc(RARG size_t s)
-{
-    return nano_valloc(RCALL ALIGN_TO(s, MALLOC_PAGE_ALIGN));
-}
-#endif /* DEFINE_PVALLOC */

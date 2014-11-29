@@ -1,0 +1,7 @@
+#ifndef __LUALIGHTS_LUA_ALLOC_H
+#define __LUALIGHTS_LUA_ALLOC_H
+
+#define LL_ARENA_SIZE 16384
+
+
+#endif
