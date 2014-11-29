@@ -6,7 +6,7 @@ extern "C" {
 #include "lualib.h"
 #include "lauxlib.h"
 #include "lua-alloc.h"
-  
+
 /*These three are needed for stubs because something for some god awful reason wants them.  Can't find the source of them and they're easier to fix this way*/
 int _kill(pid_t pid, int sig) {return 0;}
 int _getpid() {return 1;}
@@ -16,6 +16,9 @@ ssize_t _write(int fd, const void *buf, size_t count) {return -1;}
 }
 
 lua_State *L, *t1;
+
+// predeclarations
+void l_start(const char *prgm);
 
 extern char __llalloc_sbrk_start[];
 static void l_dumpmem() {
@@ -168,7 +171,43 @@ void l_openlibs(lua_State *L) {
 
 // INIT AND FRAME CODE.
 void l_init() {
-  ll_clean_arena(); // initilize the arena
+  l_start("function main()\n"
+          "    local leds = led_data()\n"
+          "    while true do\n"
+          "        \n"
+          "        for g = 0, 255, 5 do\n"
+          "                  leds[1] = 255 * 65536 + g * 256\n"
+          "        end\n"
+          "        for r = 255, 0, -5 do\n"
+          "                  leds[1] = r * 65536 + 255 * 256\n"
+          "        end\n"
+          "        for b = 0, 255, 5 do\n"
+          "                  leds[1] = 255 * 256 + b\n"
+          "        end\n"
+          "        for g = 255, 0, -5 do\n"
+          "                  leds[1] = g * 256 + 255\n"
+          "        end\n"
+          "        for r = 0, 255, 5 do\n"
+          "                  leds[1] = r * 65536 + 255\n"
+          "        end\n"
+          "        for b = 255, 0, -5 do\n"
+          "                  leds[1] = 255 * 65536 + b\n"
+          "        end\n"
+          "    end\n"
+          "end\n");
+  
+  l_dumpmem();
+}
+
+void l_stop() {
+  if (L != NULL) 
+    lua_close(L);
+  t1 = NULL;
+}
+
+void l_start(const char *prgm) {
+  ll_clean_arena();
+  t1 = NULL;
   L = lua_newstate(l_alloc, 0);
 
   LogOut.println("Importing libraries");
@@ -176,35 +215,8 @@ void l_init() {
   l_openlibs(L);
   luaopen_array(L);
   LogOut.println("Libraries imported\nLoading hello world");
-  //luaopen_debug(L);
-  //getarray(L);
-  
-  int e = luaL_dostring(L, 
-                   //"coroutine = require(\"coroutine\")\n"
-                   "function main()\n"
-                   "    local leds = led_data()\n"
-                   "    while true do\n"
-                   "        \n"
-                   "        for g = 0, 255, 5 do\n"
-                   "                  leds[1] = 255 * 65536 + g * 256\n"
-                   "        end\n"
-                   "        for r = 255, 0, -5 do\n"
-                   "                  leds[1] = r * 65536 + 255 * 256\n"
-                   "        end\n"
-                   "        for b = 0, 255, 5 do\n"
-                   "                  leds[1] = 255 * 256 + b\n"
-                   "        end\n"
-                   "        for g = 255, 0, -5 do\n"
-                   "                  leds[1] = g * 256 + 255\n"
-                   "        end\n"
-                   "        for r = 0, 255, 5 do\n"
-                   "                  leds[1] = r * 65536 + 255\n"
-                   "        end\n"
-                   "        for b = 255, 0, -5 do\n"
-                   "                  leds[1] = 255 * 65536 + b\n"
-                   "        end\n"
-                   "    end\n"
-                   "end\n");
+
+  int e = luaL_dostring(L, prgm);
 
   if (e) {
     LogOut.print("error evaling default sub: ");
@@ -215,21 +227,8 @@ void l_init() {
   t1 = lua_newthread(L);
   l_sethook(t1);
   lua_getglobal(t1, "main");
-  
-  l_dumpmem();
-}
-
-void l_reinit() {
-  lua_close(L);
-  // clear memory when I have allocator write
-  l_init(); // reload system
 }
 
 void l_frame() {
-  lua_Integer d;
-  LogOut.println("Executing hello world:");
-//  LogOut.println(millis(), DEC);
-
-  
   full_run(L, t1);
 }
