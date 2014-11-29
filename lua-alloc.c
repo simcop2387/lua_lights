@@ -36,6 +36,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include "lua-alloc.h"
+
 #if DEBUG
 #include <assert.h>
 #else
@@ -45,14 +47,6 @@
 #ifndef MAX
 #define MAX(a,b) ((a) >= (b) ? (a) : (b))
 #endif
-
-#define RARG
-#define RONEARG
-#define RCALL
-#define RONECALL
-#define MALLOC_LOCK
-#define MALLOC_UNLOCK
-#define RERRNO errno
 
 /* Redefine names to avoid conflict with user names */
 #define free_list __llalloc_free_list
@@ -73,47 +67,6 @@
 #define MALLOC_PAGE_ALIGN (sizeof(void *))
 #define MAX_ALLOC_SIZE (0x4000U)
 
-typedef size_t malloc_size_t;
-
-typedef struct malloc_chunk
-{
-    /*          ------------------
-     *   chunk->| size (4 bytes) |
-     *          ------------------
-     *          | Padding for    |
-     *          | alignment      |
-     *          | holding neg    |
-     *          | offset to size |
-     *          ------------------
-     * mem_ptr->| point to next  |
-     *          | free when freed|
-     *          | or data load   |
-     *          | when allocated |
-     *          ------------------
-     */
-    /* size of the allocated payload area, including size before
-       CHUNK_OFFSET */
-    long size;
-
-    /* since here, the memory is either the next free block, or data load */
-    struct malloc_chunk * next;
-}chunk;
-
-/* Copied from malloc.h */
-struct mallinfo
-{
-  size_t arena;    /* total space allocated from system */
-  size_t ordblks;  /* number of non-inuse chunks */
-  size_t smblks;   /* unused -- always zero */
-  size_t hblks;    /* number of mmapped regions */
-  size_t hblkhd;   /* total space in mmapped regions */
-  size_t usmblks;  /* unused -- always zero */
-  size_t fsmblks;  /* unused -- always zero */
-  size_t uordblks; /* total allocated space */
-  size_t fordblks; /* total non-inuse space */
-  size_t keepcost; /* top-most, releasable (via malloc_trim) space */
-};
-
 #define CHUNK_OFFSET ((malloc_size_t)(&(((struct malloc_chunk *)0)->next)))
 
 /* size of smallest possible chunk. A memory piece smaller than this size
@@ -122,16 +75,8 @@ struct mallinfo
 
 /* Forward data declarations */
 extern chunk * free_list;
-extern char * sbrk_start;
+extern char sbrk_start[];
 extern struct mallinfo current_mallinfo;
-
-/* Forward function declarations */
-extern void * ll_malloc(RARG malloc_size_t);
-extern void ll_free (RARG void * free_p);
-extern void * ll_calloc(RARG malloc_size_t n, malloc_size_t elem);
-extern struct mallinfo ll_mallinfo(RONEARG);
-extern malloc_size_t ll_malloc_usable_size(RARG void * ptr);
-extern void * ll_realloc(RARG void * ptr, malloc_size_t size);
 
 static inline chunk * get_chunk_from_ptr(void * ptr)
 {
@@ -145,17 +90,14 @@ static inline chunk * get_chunk_from_ptr(void * ptr)
 char sbrk_start[LL_ARENA_SIZE];
 
 /* List list header of free blocks */
-chunk free_list_default = {LL_ARENA_SIZE, NULL}; // keep a statically allocated starter freelist
-chunk * free_list = &free_list_default;
+chunk * free_list = (chunk *) &sbrk_start;
 
 void ll_clean_arena() {
-  // Make sure the default hasn't been overridden
-  free_list_default.size = LL_ARENA_SIZE;
-  free_list_default.next = NULL;
-  free_list = &free_list_default;
-  
   // Reset all ram inside the arena
   memset(sbrk_start, 0, LL_ARENA_SIZE);
+
+  // Make sure the default hasn't been overridden
+  free_list->size = LL_ARENA_SIZE;
 }
 
 /** Function ll_malloc
@@ -163,7 +105,7 @@ void ll_clean_arena() {
   *   Walk through the free list to find the first match. If fails to find
   *   one, call sbrk to allocate a new chunk.
   */
-void * ll_malloc(RARG malloc_size_t s)
+void * ll_malloc(malloc_size_t s)
 {
     chunk *p, *r;
     char * ptr, * align_ptr;
@@ -178,11 +120,9 @@ void * ll_malloc(RARG malloc_size_t s)
 
     if (alloc_size >= MAX_ALLOC_SIZE || alloc_size < s)
     {
-        RERRNO = ENOMEM;
+        errno = ENOMEM;
         return NULL;
     }
-
-    MALLOC_LOCK;
 
     p = free_list;
     r = p;
@@ -222,11 +162,9 @@ void * ll_malloc(RARG malloc_size_t s)
     /* Failed to find a appropriate chunk. Ask for more memory */
     if (r == NULL)
     {
-        RERRNO = ENOMEM;
-        MALLOC_UNLOCK;
+        errno = ENOMEM;
         return NULL;
     }
-    MALLOC_UNLOCK;
 
     ptr = (char *)r + CHUNK_OFFSET;
 
@@ -251,7 +189,7 @@ void * ll_malloc(RARG malloc_size_t s)
   *  insert should make sure all chunks are sorted by address from low to
   *  high.  Then merge with neighbor chunks if adjacent.
   */
-void ll_free (RARG void * free_p)
+void ll_free (void * free_p)
 {
     chunk * p_to_free;
     chunk * p, * q;
@@ -260,13 +198,11 @@ void ll_free (RARG void * free_p)
 
     p_to_free = get_chunk_from_ptr(free_p);
 
-    MALLOC_LOCK;
     if (free_list == NULL)
     {
         /* Set first free list element */
         p_to_free->next = free_list;
         free_list = p_to_free;
-        MALLOC_UNLOCK;
         return;
     }
 
@@ -285,7 +221,6 @@ void ll_free (RARG void * free_p)
             p_to_free->next = free_list;
         }
         free_list = p_to_free;
-        MALLOC_UNLOCK;
         return;
     }
 
@@ -316,8 +251,7 @@ void ll_free (RARG void * free_p)
     else if ((char *)p + p->size > (char *)p_to_free)
     {
         /* Report double free fault */
-        RERRNO = ENOMEM;
-        MALLOC_UNLOCK;
+        errno = ENOMEM;
         return;
     }
     else if ((char *)p_to_free + p_to_free->size == (char *) q)
@@ -335,57 +269,53 @@ void ll_free (RARG void * free_p)
         p_to_free->next = q;
         p->next = p_to_free;
     }
-    MALLOC_UNLOCK;
 }
 
 /* Function ll_calloc
  * Implement calloc simply by calling malloc and set zero */
-void * ll_calloc(RARG malloc_size_t n, malloc_size_t elem)
+void * ll_calloc(malloc_size_t n, malloc_size_t elem)
 {
-    void * mem = ll_malloc(RCALL n * elem);
+    void * mem = ll_malloc(n * elem);
     if (mem != NULL) memset(mem, 0, n * elem);
     return mem;
 }
 
 /* Function ll_realloc
  * Implement realloc by malloc + memcpy */
-void * ll_realloc(RARG void * ptr, malloc_size_t size)
+void * ll_realloc(void * ptr, malloc_size_t size)
 {
     void * mem;
-    chunk * p_to_realloc;
+//    chunk * p_to_realloc;
 
-    if (ptr == NULL) return ll_malloc(RCALL size);
+    if (ptr == NULL) return ll_malloc(size);
 
     if (size == 0)
     {
-        ll_free(RCALL ptr);
+        ll_free(ptr);
         return NULL;
     }
 
     /* TODO: There is chance to shrink the chunk if newly requested
      * size is much small */
-    if (ll_malloc_usable_size(RCALL ptr) >= size)
+    if (ll_malloc_usable_size(ptr) >= size)
       return ptr;
 
-    mem = ll_malloc(RCALL size);
+    mem = ll_malloc(size);
     if (mem != NULL)
     {
         memcpy(mem, ptr, size);
-        ll_free(RCALL ptr);
+        ll_free(ptr);
     }
     return mem;
 }
 
 struct mallinfo current_mallinfo={0,0,0,0,0,0,0,0,0,0};
 
-struct mallinfo ll_mallinfo(RONEARG)
+struct mallinfo ll_mallinfo()
 {
-    char * sbrk_now;
     chunk * pf;
     size_t free_size = 0;
     size_t total_size = LL_ARENA_SIZE;
-
-    MALLOC_LOCK;
 
     for (pf = free_list; pf; pf = pf->next)
         free_size += pf->size;
@@ -394,11 +324,10 @@ struct mallinfo ll_mallinfo(RONEARG)
     current_mallinfo.fordblks = free_size;
     current_mallinfo.uordblks = total_size - free_size;
 
-    MALLOC_UNLOCK;
     return current_mallinfo;
 }
 
-malloc_size_t ll_malloc_usable_size(RARG void * ptr)
+malloc_size_t ll_malloc_usable_size(void * ptr)
 {
     chunk * c = (chunk *)((char *)ptr - CHUNK_OFFSET);
     int size_or_offset = c->size;

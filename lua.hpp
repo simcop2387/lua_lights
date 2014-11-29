@@ -5,6 +5,7 @@ extern "C" {
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
+#include "lua-alloc.h"
   
 /*These three are needed for stubs because something for some god awful reason wants them.  Can't find the source of them and they're easier to fix this way*/
 int _kill(pid_t pid, int sig) {return 0;}
@@ -16,8 +17,32 @@ ssize_t _write(int fd, const void *buf, size_t count) {return -1;}
 
 lua_State *L, *t1;
 
+extern char __llalloc_sbrk_start[];
+static void l_dumpmem() {
+  uint8_t byte = 0;
+  
+  LogOut.print("\t\t");
+  for (int i = 0; i < LL_ARENA_SIZE; i++) {
+    byte = __llalloc_sbrk_start[i];
+    LogOut.print(byte, HEX);
+  }
+  LogOut.println();
+}
+
+static void l_memstats() {
+  struct mallinfo c= ll_mallinfo();
+  
+  LogOut.print("\t->mallinfo: ");
+  LogOut.print(c.arena);
+  LogOut.print(" ");
+  LogOut.print(c.fordblks);
+  LogOut.print(" ");
+  LogOut.println(c.uordblks);
+}
+
 // I want to replace this with an arena allocator so that i can get better memory performance in the future
  static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
+  l_memstats();
   LogOut.print("\t->alloc called: ");
   LogOut.print((size_t) ud, HEX);
   LogOut.print(" ");
@@ -26,14 +51,14 @@ lua_State *L, *t1;
   LogOut.print(osize, DEC);
   LogOut.print(",");
   LogOut.println(nsize, DEC);
-
+ 
   (void)ud;  (void)osize;  /* not used */
   if (nsize == 0) {
-    free(ptr);
+    ll_free(ptr);
     return NULL;
   }
   else
-    return realloc(ptr, nsize);
+    return ll_realloc(ptr, nsize);
 }
 
 // CREATE ARRAY TYPE AND EXPOSE led_data TO LUA.
@@ -143,6 +168,7 @@ void l_openlibs(lua_State *L) {
 
 // INIT AND FRAME CODE.
 void l_init() {
+  ll_clean_arena(); // initilize the arena
   L = lua_newstate(l_alloc, 0);
 
   LogOut.println("Importing libraries");
@@ -189,6 +215,8 @@ void l_init() {
   t1 = lua_newthread(L);
   l_sethook(t1);
   lua_getglobal(t1, "main");
+  
+  l_dumpmem();
 }
 
 void l_reinit() {
