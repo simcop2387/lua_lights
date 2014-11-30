@@ -68,17 +68,57 @@ METHOD(root) {
     client.write(pgm_read_byte(&doc_gzip[i]));
 }
 
-METHOD(interface) {
-  give_200(client, method);
-  
-  for (uint16_t i = 0; i < sizeof(inter_head); i++)
-    client.write(pgm_read_byte(&inter_head[i]));
-  
-  for (uint16_t i = 0; i < sizeof(l_prog_buff) && l_prog_buff[i]; i++)
-    client.write(pgm_read_byte(&l_prog_buff[i]));  
+/* Converts a hex character to its integer value */
+char from_hex(char ch) {
+  return isdigit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
+}
 
-  for (uint16_t i = 0; i < sizeof(inter_foot); i++)
-    client.write(pgm_read_byte(&inter_foot[i]));
+METHOD(interface) {
+  if (method == GET) {
+    give_200(client, method);
+    for (uint16_t i = 0; i < sizeof(inter_head); i++)
+      client.write(pgm_read_byte(&inter_head[i]));
+    
+    for (uint16_t i = 0; i < sizeof(l_prog_buff) && l_prog_buff[i]; i++)
+      client.write(pgm_read_byte(&l_prog_buff[i]));  
+
+    for (uint16_t i = 0; i < sizeof(inter_foot); i++)
+      client.write(pgm_read_byte(&inter_foot[i]));
+  } else {
+    if (client.available()) {
+      char name[16];
+      read_name(client, name);
+            
+      if (!strncmp(name, "prgm", 16)) {
+        int i = 0;
+        char c;
+        memset(l_prog_buff, 0, sizeof(l_prog_buff));
+        for (i = 0; i < sizeof(l_prog_buff) && client.available(); i++) {
+          c = client.read();
+          
+          if (c != '+' && c != '%') { // non-encoded char
+            l_prog_buff[i] = c;
+          } else if (c == '+') { // url encoded space
+            l_prog_buff[i] = ' ';
+          } else if (c == '%') { // % encoded string
+            char a, b;
+            a = client.read();
+            b = client.read();
+
+            c = from_hex(a) << 4 | from_hex(b);
+            l_prog_buff[i] = c;
+          }
+        }
+        
+        output_log("\n");
+        output_log("Program loaded, compiling...\n");
+        l_stop();
+        l_start(l_prog_buff);
+      }
+    }
+    
+    interface(client, GET); // give back the same GET output that we had before
+  }
 }
 
 
@@ -91,7 +131,7 @@ METHOD(output) {
     p = log_ringbuffer;
   
   
-  client.fastrprint("<html><body><pre>");
+  client.fastrprint("<html><head><meta http-equiv=\"refresh\" content=\"5\"><body><pre>");
   while(p != log_curpos) {
     if (*p)
       client.write(*p);
@@ -125,5 +165,6 @@ method_resolve GET_LIST[] = {
 
 method_resolve POST_LIST[] = {
   ROUTE(root, root_path),
+  ROUTE(interface, interface_path),
 };
 
