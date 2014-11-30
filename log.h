@@ -7,6 +7,7 @@
 #define LOG_RINGSIZE 8192
 
 extern char log_ringbuffer[]; // ring buffer for the output log
+extern char *log_curpos;
 
 #define debug_log(x) _debug_log(__BASE_FILE__, __FUNCTION__, __LINE__, x)
 #define debug_logf(x, f) _debug_log(__BASE_FILE__, __FUNCTION__, __LINE__, x, f)

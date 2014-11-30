@@ -1,4 +1,5 @@
 #include "docs.h"
+#include "log.h"
 
 const int GET = 0;
 const int POST = 1;
@@ -65,6 +66,24 @@ METHOD(root) {
   // This will eventually end up being a gziped set of docs
 }
 
+METHOD(output) {
+  give_200(client, method);
+  
+  char *p = log_curpos+1;
+  if (p - log_ringbuffer >= LOG_RINGSIZE)
+    p = log_ringbuffer;
+  
+  while(p != log_curpos) {
+    if (*p)
+      client.write(*p);
+
+    p++;
+
+    if (p - log_ringbuffer >= LOG_RINGSIZE)
+      p = log_ringbuffer;    
+  }
+}
+
 // Setup the path resolver
 struct method_resolve {
   const prog_char *path;
@@ -75,9 +94,11 @@ struct method_resolve {
 #define ROUTE(m, p) {(const prog_char *) &p [0], m}
 
 FPATH(root_path) = "/";
+FPATH(output_path) = "/output";
 
 method_resolve GET_LIST[] = {
   ROUTE(root, root_path),
+  ROUTE(output, output_path),
 };
 
 method_resolve POST_LIST[] = {

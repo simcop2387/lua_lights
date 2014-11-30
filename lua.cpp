@@ -150,6 +150,29 @@ int luaopen_array (lua_State* L) {
    return 0;
 }
 
+// This code blatantly stolen and borrowed from lbaselib.c luaB_print
+static int l_print (lua_State *L) {
+  int n = lua_gettop(L);  /* number of arguments */
+  int i;
+  lua_getglobal(L, "tostring");
+  for (i=1; i<=n; i++) {
+    const char *s;
+    size_t l;
+    lua_pushvalue(L, -1);  /* function to be called */
+    lua_pushvalue(L, i);   /* value to print */
+    lua_call(L, 1, 1);
+    s = lua_tolstring(L, -1, &l);  /* get result */
+    if (s == NULL)
+      return luaL_error(L,
+         LUA_QL("tostring") " must return a string to " LUA_QL("print"));
+    //if (i>1) luai_writestring("\t", 1);
+    output_log(s);
+    lua_pop(L, 1);  /* pop result */
+  }
+  //luai_writeline();
+  return 0;
+}
+
 static const luaL_Reg loadedlibs[] = {
   {"_G", luaopen_base},
 //  {LUA_LOADLIBNAME, luaopen_package},
@@ -175,6 +198,7 @@ void l_openlibs(lua_State *L) {
 void l_init() {
   l_start("function main()\n"
           "    local leds = led_data()\n"
+          "    print \"Hello World\"\n"
           "    while true do\n"
           "        \n"
           "        for g = 0, 255, 5 do\n"
@@ -223,6 +247,9 @@ void l_start(const char *prgm) {
   
   l_openlibs(L);
   luaopen_array(L);
+  lua_pushcfunction(L, l_print);
+  lua_setglobal(L, "print");
+
   debug_log("Libraries imported");
   debug_log("Loading program");
 
