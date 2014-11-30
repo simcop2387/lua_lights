@@ -19,6 +19,7 @@ lua_State *L, *t1;
 
 // predeclarations
 void l_start(const char *prgm);
+void l_initthread();
 
 extern char __llalloc_sbrk_start[];
 static void l_dumpmem() {
@@ -34,26 +35,19 @@ static void l_dumpmem() {
 
 static void l_memstats() {
   struct mallinfo c= ll_mallinfo();
-  
-  LogOut.print("\t->mallinfo: ");
-  LogOut.print(c.arena);
-  LogOut.print(" ");
-  LogOut.print(c.fordblks);
-  LogOut.print(" ");
-  LogOut.println(c.uordblks);
+  char buff[64];
+  sprintf(buff, "->mallinfo: t:%d f:%d u:%d", c.arena, c.fordblks, c.uordblks);
+  debug_log(buff);
 }
 
 // I want to replace this with an arena allocator so that i can get better memory performance in the future
  static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
   l_memstats();
-  LogOut.print("\t->alloc called: ");
-  LogOut.print((size_t) ud, HEX);
-  LogOut.print(" ");
-  LogOut.print((size_t) ptr, HEX);
-  LogOut.print(" ");
-  LogOut.print(osize, DEC);
-  LogOut.print(",");
-  LogOut.println(nsize, DEC);
+  
+  //"\t->alloc called: 12345678 12345678 12345 12345";
+  char buff[64];
+  sprintf(buff, "\t->alloc called: %08X %08X %05d %05d", (size_t) ud, (size_t) ptr, osize, nsize);
+  debug_log(buff);
  
   (void)ud;  (void)osize;  /* not used */
   if (nsize == 0) {
@@ -95,18 +89,25 @@ int full_run(lua_State *L, lua_State *t) {
   int rc = lua_resume(t, L, 0);
 
   // TODO this is the all important part where i handle errors, the main function exiting, and make sure yielding went properly
-  LogOut.print("rc = ");
-  LogOut.println(rc, DEC);
+  char buff[24];
+  sprintf(buff, "rc = %d", rc);
+  debug_log(buff);
+  
   if (rc == 0) {
-    LogOut.println("Finished?");
+    // Should this be output log?
+    debug_log("User supplied function exited successfully.  Restarting thread");
+    l_initthread();
   } else if (rc == LUA_ERRRUN) {
-    LogOut.print("Errored!");
-    LogOut.println(lua_tostring(t1, -1));
+    output_log("Runtime error: ");
+    output_log(lua_tostring(t1, -1));
+    output_log("Halting lua runtime");
+    t1 = NULL;
   } else if (rc != LUA_YIELD) {
-    LogOut.println("Errored!");
-  } else {
-    LogOut.println("Yielded!");
-  }
+    output_log("Unknown error: ");
+    output_log(lua_tostring(t1, -1));
+    output_log("Halting lua runtime");
+    t1 = NULL;
+  } 
 
   return rc;
 }
@@ -196,7 +197,14 @@ void l_init() {
           "    end\n"
           "end\n");
   
-  l_dumpmem();
+  //l_dumpmem();
+}
+
+void l_initthread() {
+  // Create the coroutine
+  t1 = lua_newthread(L);
+  l_sethook(t1);
+  lua_getglobal(t1, "main");
 }
 
 void l_stop() {
@@ -210,23 +218,20 @@ void l_start(const char *prgm) {
   t1 = NULL;
   L = lua_newstate(l_alloc, 0);
 
-  LogOut.println("Importing libraries");
+  debug_log("Importing libraries");
   
   l_openlibs(L);
   luaopen_array(L);
-  LogOut.println("Libraries imported\nLoading hello world");
+  debug_log("Libraries imported\nLoading hello world");
 
   int e = luaL_dostring(L, prgm);
 
   if (e) {
-    LogOut.print("error evaling default sub: ");
-    LogOut.println(lua_tostring(L, -1));
+    output_log("error evaling lua code: ");
+    output_log(lua_tostring(L, -1));
   }
   
-  // Create the coroutine
-  t1 = lua_newthread(L);
-  l_sethook(t1);
-  lua_getglobal(t1, "main");
+  l_initthread();
 }
 
 void l_frame() {
