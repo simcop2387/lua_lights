@@ -14,23 +14,23 @@
     } \
   } \
   \
-  LogOut.print(F("GOT URL: ")); \
-  LogOut.println((const char *) buffer); \
+  debug_log("GOT URL: "); \
+  debug_log((const char *) buffer); \
   \
   uint16_t length = sizeof(meth ## _LIST)/sizeof(meth ## _LIST[0]); \
   \
-  LogOut.print(F("GET_LIST SIZE: ")); \
-  LogOut.println(length); \
+  debug_log("GET_LIST SIZE: "); \
+  debug_log(length); \
   \
   for (size_t i = 0; i < length; i++) { \
-    LogOut.print(F("Checking: ")); \
-    LogOut.println(i); \
+    debug_log("Checking: "); \
+    debug_log(i); \
     char path[64]; \
     strncpy_P(path, meth ## _LIST[i].path, 63); \
-    LogOut.print(F("P: ")); \
-    LogOut.println(path); \
-    LogOut.println((int) meth ## _LIST[i].path, HEX); \
-    LogOut.println((int) root_path, HEX); \
+    debug_log("Path: "); \
+    debug_log(path); \
+    debug_logf((int) meth ## _LIST[i].path, HEX); \
+    debug_logf((int) root_path, HEX); \
     \
     if (!strncmp_P((const char *)buffer, meth ## _LIST[i].path, 63)) { \
         skip_headers(client, num); \

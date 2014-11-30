@@ -34,7 +34,8 @@ bool displayConnectionDetails(void)
   else
   {
     char buff[64];
-    sprintf(buff, "IP Addr: %d.%d.%d.%d", (int) (ipAddress & 0xFF000000) >> 24, (int) (ipAddress & 0xFF0000) >> 16, (int) (ipAddress & 0xFF00) >> 8, (int) (ipAddress & 0xFF));
+    sprintf(buff, "IP Addr: %d.%d.%d.%d", (uint) (ipAddress & 0xFF000000) >> 24, (uint) (ipAddress & 0xFF0000) >> 16, (uint) (ipAddress & 0xFF00) >> 8, (uint) (ipAddress & 0xFF));
+    debug_log(buff);
     return true;
   }
 }

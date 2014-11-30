@@ -20,10 +20,7 @@ void read_method(Adafruit_CC3000_ClientRef &client) {
       break;
     }
   }
-  
-//  LogOut.print(F("GOT METHOD: "));
-//  LogOut.println((const char*) method);
-  
+    
   if (!strncmp((const char *) method, "GET", 8)) {
     handle_GET(client);
   } else if (!strncmp((const char *) method, "POST", 8)) {
@@ -38,16 +35,13 @@ void read_method(Adafruit_CC3000_ClientRef &client) {
 }
 
 void listen_http() {
-  // LogOut.println("Checking HTTP...");
   Adafruit_CC3000_ClientRef client = httpServer.available();
-  // LogOut.println("Got Accept");
   
   if (client) {
-    LogOut.println("GOT REQUEST, READING METHOD");
+    debug_log("GOT REQUEST, READING METHOD");
     read_method(client);
     client.close();
   }
 
   client.close();
-  // LogOut.println("Done HTTP");
 }

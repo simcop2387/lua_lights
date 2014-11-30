@@ -9,7 +9,9 @@
 extern char log_ringbuffer[]; // ring buffer for the output log
 
 #define debug_log(x) _debug_log(__BASE_FILE__, __FUNCTION__, __LINE__, x)
+#define debug_logf(x, f) _debug_log(__BASE_FILE__, __FUNCTION__, __LINE__, x, f)
 #define output_log(x) _output_log(__BASE_FILE__, __FUNCTION__, __LINE__, x)
+#define output_logf(x, f) _output_log(__BASE_FILE__, __FUNCTION__, __LINE__, x, f)
 
 // debug_log only logs to the Serial port, output_log will output to the ring buffer available to the webserver
 void _debug_log(const char *file, const char* function, const int line, const char *message);
