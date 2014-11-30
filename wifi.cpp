@@ -27,45 +27,34 @@ bool displayConnectionDetails(void)
   
   if(!cc3000.getIPAddress(&ipAddress, &netmask, &gateway, &dhcpserv, &dnsserv))
   {
-    LogOut.println("Unable to retrieve the IP Address!\r\n");
+    // Useless for this to be in the output buffer, you couldn't see it
+    debug_log("Unable to retrieve the IP Address!");
     return false;
   }
   else
   {
-    LogOut.print("\nIP Addr: ");// cc3000.printIPdotsRev(ipAddress);
-    LogOut.print(ipAddress, HEX);
-/*    LogOut.print(F("\nNetmask: ")); //cc3000.printIPdotsRev(netmask);
-    LogOut.print(netmask, HEX);
-    LogOut.print(F("\nGateway: ")); //cc3000.printIPdotsRev(gateway);
-    LogOut.print(gateway, HEX);
-    LogOut.print(F("\nDHCPsrv: ")); //cc3000.printIPdotsRev(dhcpserv);
-    LogOut.print(F("\nDNSserv: ")); //cc3000.printIPdotsRev(dnsserv);
-    LogOut.println();*/
+    char buff[64];
+    sprintf(buff, "IP Addr: %d.%d.%d.%d", (int) (ipAddress & 0xFF000000) >> 24, (int) (ipAddress & 0xFF0000) >> 16, (int) (ipAddress & 0xFF00) >> 8, (int) (ipAddress & 0xFF));
     return true;
   }
 }
 
 void setup_cc3000() {
   /* Initialise the module */
-//  LogOut.println(F("\nInitialising the CC3000 ..."));
-  cc3000.setPrinter(dynamic_cast<Print *>(&LogOut));
+
+  cc3000.setPrinter(NULL); //dynamic_cast<Print *>(&LogOut));
   if (!cc3000.begin())
   {
-    LogOut.println("Unable to initialise the CC3000! Check your wiring?");
+    debug_log("Unable to initialise the CC3000! Check your wiring?");
     while(1);
   }
 
   /* Attempt to connect to an access point */  
-  /* NOTE: Secure connections are not available in 'Tiny' mode! */
   if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
-    LogOut.println("Failed to connect to AP!");
+    debug_log("Failed to connect to AP!");
     while(1);
   }
    
-//  LogOut.println(F("Connected!"));
-  
-  /* Wait for DHCP to complete */
-//  LogOut.println(F("Request DHCP"));
   while (!cc3000.checkDHCP())
   {
     delay(100); // ToDo: Insert a DHCP timeout!, could use the motion counter if i init that first..

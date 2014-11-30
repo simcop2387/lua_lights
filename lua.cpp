@@ -90,8 +90,6 @@ int full_run(lua_State *L, lua_State *t) {
 
   // TODO this is the all important part where i handle errors, the main function exiting, and make sure yielding went properly
   char buff[24];
-  sprintf(buff, "rc = %d", rc);
-  debug_log(buff);
   
   if (rc == 0) {
     // Should this be output log?
@@ -103,7 +101,10 @@ int full_run(lua_State *L, lua_State *t) {
     output_log("Halting lua runtime");
     t1 = NULL;
   } else if (rc != LUA_YIELD) {
+    sprintf(buff, "rc = %d", rc);
+
     output_log("Unknown error: ");
+    output_log(buff);
     output_log(lua_tostring(t1, -1));
     output_log("Halting lua runtime");
     t1 = NULL;
@@ -222,7 +223,8 @@ void l_start(const char *prgm) {
   
   l_openlibs(L);
   luaopen_array(L);
-  debug_log("Libraries imported\nLoading hello world");
+  debug_log("Libraries imported");
+  debug_log("Loading program");
 
   int e = luaL_dostring(L, prgm);
 
