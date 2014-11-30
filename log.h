@@ -4,7 +4,7 @@
 //  HardwareSerial CommOut = HardwareSerial();
 // usb_serial_class LogOut = Serial;
 #define LogOut Serial
-#define LOG_RINGSIZE 8192
+#define LOG_RINGSIZE 4096
 
 extern char log_ringbuffer[]; // ring buffer for the output log
 extern char *log_curpos;

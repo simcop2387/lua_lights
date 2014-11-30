@@ -1,5 +1,6 @@
 #include "docs.h"
 #include "log.h"
+#include "lua.hpp"
 
 const int GET = 0;
 const int POST = 1;
@@ -23,6 +24,13 @@ METHOD(give_404) {
                       "Server: MiniC HTTPD 0.1\r\n"
                       "\r\n");
   client.fastrprint("Not found\r\n");
+}
+
+METHOD(give_200_gzip) {
+    client.fastrprint("HTTP/1.0 200 OK\r\n"
+                    "Server: MiniC HTTPD 0.1\r\n"
+                    "Content-Encoding: gzip\r\n"
+                    "\r\n");                     
 }
 
 // Helpers
@@ -54,17 +62,26 @@ int read_value(Adafruit_CC3000_ClientRef &client, char *str) {
 
 // METHODS
 METHOD(root) {
-  client.fastrprint("HTTP/1.0 200 OK\r\n"
-                    "Server: MiniC HTTPD 0.1\r\n"
-                    "Content-Encoding: gzip\r\n"
-                    "\r\n");
-                      
-                      
+  give_200_gzip(client, method);
+  
   for (uint16_t i = 0; i < sizeof(doc_gzip); i++)
     client.write(pgm_read_byte(&doc_gzip[i]));
-  
-  // This will eventually end up being a gziped set of docs
 }
+
+METHOD(interface) {
+  give_200(client, method);
+  
+  for (uint16_t i = 0; i < sizeof(inter_head); i++)
+    client.write(pgm_read_byte(&inter_head[i]));
+  
+  for (uint16_t i = 0; i < sizeof(l_prog_buff) && l_prog_buff[i]; i++)
+    client.write(pgm_read_byte(&l_prog_buff[i]));  
+
+  for (uint16_t i = 0; i < sizeof(inter_foot); i++)
+    client.write(pgm_read_byte(&inter_foot[i]));
+}
+
+
 
 METHOD(output) {
   give_200(client, method);
@@ -73,6 +90,8 @@ METHOD(output) {
   if (p - log_ringbuffer >= LOG_RINGSIZE)
     p = log_ringbuffer;
   
+  
+  client.fastrprint("<html><body><pre>");
   while(p != log_curpos) {
     if (*p)
       client.write(*p);
@@ -82,6 +101,7 @@ METHOD(output) {
     if (p - log_ringbuffer >= LOG_RINGSIZE)
       p = log_ringbuffer;    
   }
+  client.fastrprint("</pre></body></html>");
 }
 
 // Setup the path resolver
@@ -95,10 +115,12 @@ struct method_resolve {
 
 FPATH(root_path) = "/";
 FPATH(output_path) = "/output";
+FPATH(interface_path) = "/interface";
 
 method_resolve GET_LIST[] = {
   ROUTE(root, root_path),
   ROUTE(output, output_path),
+  ROUTE(interface, interface_path),
 };
 
 method_resolve POST_LIST[] = {

@@ -1,5 +1,6 @@
 #include "log.h"
 #include "leds.h"
+#include "lua.hpp"
 
 extern "C" {
 #include "lua.h"
@@ -14,6 +15,32 @@ int _gettimeofday(struct timeval *tv, struct timezone *tz) {return -1;}
 int _open(const char *pathname, int flags) {return -1;}
 ssize_t _write(int fd, const void *buf, size_t count) {return -1;}
 }
+
+char l_prog_buff[MAX_PRGMSIZE] = "function main()\n"
+          "    local leds = led_data()\n"
+          "    print \"Hello World\"\n"
+          "    while true do\n"
+          "        \n"
+          "        for g = 0, 255, 5 do\n"
+          "                  leds[1] = 255 * 65536 + g * 256\n"
+          "        end\n"
+          "        for r = 255, 0, -5 do\n"
+          "                  leds[1] = r * 65536 + 255 * 256\n"
+          "        end\n"
+          "        for b = 0, 255, 5 do\n"
+          "                  leds[1] = 255 * 256 + b\n"
+          "        end\n"
+          "        for g = 255, 0, -5 do\n"
+          "                  leds[1] = g * 256 + 255\n"
+          "        end\n"
+          "        for r = 0, 255, 5 do\n"
+          "                  leds[1] = r * 65536 + 255\n"
+          "        end\n"
+          "        for b = 255, 0, -5 do\n"
+          "                  leds[1] = 255 * 65536 + b\n"
+          "        end\n"
+          "    end\n"
+          "end\n";
 
 lua_State *L, *t1;
 
@@ -86,6 +113,9 @@ static int l_sethook(lua_State *L) {
 }
 
 int full_run(lua_State *L, lua_State *t) {
+  if (t == NULL)
+    return -1;  // If thread has been cancled don't run!
+    
   int rc = lua_resume(t, L, 0);
 
   // TODO this is the all important part where i handle errors, the main function exiting, and make sure yielding went properly
@@ -196,31 +226,7 @@ void l_openlibs(lua_State *L) {
 
 // INIT AND FRAME CODE.
 void l_init() {
-  l_start("function main()\n"
-          "    local leds = led_data()\n"
-          "    print \"Hello World\"\n"
-          "    while true do\n"
-          "        \n"
-          "        for g = 0, 255, 5 do\n"
-          "                  leds[1] = 255 * 65536 + g * 256\n"
-          "        end\n"
-          "        for r = 255, 0, -5 do\n"
-          "                  leds[1] = r * 65536 + 255 * 256\n"
-          "        end\n"
-          "        for b = 0, 255, 5 do\n"
-          "                  leds[1] = 255 * 256 + b\n"
-          "        end\n"
-          "        for g = 255, 0, -5 do\n"
-          "                  leds[1] = g * 256 + 255\n"
-          "        end\n"
-          "        for r = 0, 255, 5 do\n"
-          "                  leds[1] = r * 65536 + 255\n"
-          "        end\n"
-          "        for b = 255, 0, -5 do\n"
-          "                  leds[1] = 255 * 65536 + b\n"
-          "        end\n"
-          "    end\n"
-          "end\n");
+  l_start(l_prog_buff);
   
   //l_dumpmem();
 }
