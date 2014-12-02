@@ -6,7 +6,7 @@
 #define LogOut Serial
 #define LOG_RINGSIZE 4096
 
-extern char log_ringbuffer[]; // ring buffer for the output log
+extern char log_ringbuffer[LOG_RINGSIZE + 1]; // ring buffer for the output log
 extern char *log_curpos;
 
 #define debug_log(x) _debug_log(__BASE_FILE__, __FUNCTION__, __LINE__, x)

@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "log.h"
 
-char log_ringbuffer[LOG_RINGSIZE];
+char log_ringbuffer[LOG_RINGSIZE + 1];
 char *log_curpos = log_ringbuffer;
 
 void __debug_header(const char *file, const char *function, const int line) {
