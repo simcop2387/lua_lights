@@ -108,7 +108,7 @@ void l_yield(lua_State *L, lua_Debug *ar) {
 }
 
 static int l_sethook(lua_State *L) {
-  lua_sethook(L, &l_yield, LUA_MASKCOUNT, 2);
+  lua_sethook(L, &l_yield, LUA_MASKCOUNT, 100);
   return 0;
 }
 
